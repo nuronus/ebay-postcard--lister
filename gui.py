@@ -922,6 +922,13 @@ class ListingFrame(ttk.Frame):
         image_name = self.images[self.current_index].name if self.current_index >= 0 else None
         image_path = str(self.images[self.current_index]) if self.current_index >= 0 else None
 
+        # Get AI-detected aspects if available
+        ai_occasion = getattr(self.current_content, 'occasion', '') if self.current_content else ''
+        ai_theme = getattr(self.current_content, 'theme', '') if self.current_content else ''
+        ai_subject = getattr(self.current_content, 'subject', '') if self.current_content else ''
+        ai_featured_person = getattr(self.current_content, 'featured_person', '') if self.current_content else ''
+        ai_character = getattr(self.current_content, 'character', '') if self.current_content else ''
+
         def create():
             try:
                 lister = EbayLister()
@@ -931,7 +938,12 @@ class ListingFrame(ttk.Frame):
                     image_bytes=self.current_image_bytes,
                     price=price,
                     shipping_cost=shipping,
-                    quantity=quantity
+                    quantity=quantity,
+                    occasion=ai_occasion,
+                    theme=ai_theme,
+                    subject=ai_subject,
+                    featured_person=ai_featured_person,
+                    character=ai_character
                 )
                 result.image_name = image_name
                 result.barcode = barcode if barcode else None

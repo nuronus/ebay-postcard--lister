@@ -13,6 +13,12 @@ class ListingContent:
     """Generated content for an eBay listing."""
     title: str
     description: str
+    occasion: str = ""
+    theme: str = ""
+    subject: str = ""
+    featured_person: str = ""
+    character: str = ""
+    material: str = "Cardboard"
 
 
 ANALYSIS_PROMPT = """Analyze this postcard image and generate an eBay listing optimized for search and sales.
@@ -34,13 +40,37 @@ Generate a JSON response with these fields:
    - Condition: Brand new
    - Standard postcard size (approximately 4" x 6")
    - Great for: mailing, collecting, scrapbooking, framing
-
    Use <p>, <br>, and <b> tags for formatting.
 
-Focus on location-based keywords and appealing to tourists, travelers, and collectors of modern postcards.
+3. "occasion": Best matching occasion (pick ONE or leave empty):
+   Anniversary, April Fools' Day, Best Wishes, Birthday, Christmas, Congratulations,
+   Easter, Father's Day, Get Well, Graduation, Halloween, Hanukkah, Independence Day,
+   Labor Day, Memorial Day, Mother's Day, New Year, St. Patrick's Day, Thanksgiving,
+   Valentine's Day, Veterans Day, Wedding
+
+4. "theme": Best matching theme (pick ONE):
+   Abstract, Advertising, Aerial View, Agriculture, Amusement Parks, Animals, Animation,
+   Architecture, Art, Automotive, Aviation, Beach, Boats, Bridges, Buildings, Circus,
+   Cityscape, Coastal, Cultural, Entertainment, Fantasy, Fashion, Flora, Food & Drink,
+   Historical, Humor, Landmarks, Landscape, Military, Mountains, Music, Nature, Nautical,
+   People, Photography, Religion, Romance, Science, Seascape, Sports, Technology,
+   Transportation, Travel, Urban, Wildlife, Winter
+
+5. "subject": Main subject depicted (pick ONE that fits best):
+   Actors, Aircraft, Animals, Architecture, Art, Beach, Birds, Boats, Buildings, Cars,
+   Cats, Children, Churches, Cities, Dogs, Famous People, Flowers, Food, Gardens,
+   Horses, Hotels, Lakes, Landscapes, Lighthouses, Military, Mountains, Museums, Music,
+   Nature, Ocean, Parks, People, Photography, Religion, Restaurants, Rivers, Ships,
+   Sports, Streets, Sunsets, Towns, Trains, Trees, Water, Wildlife
+
+6. "featured_person": If a specific famous person is shown, their name (otherwise empty)
+
+7. "character": If a fictional character is shown, their name (otherwise empty)
+
+Focus on location-based keywords and appealing to tourists, travelers, and collectors.
 
 Respond ONLY with valid JSON, no other text:
-{"title": "...", "description": "..."}"""
+{"title": "...", "description": "...", "occasion": "...", "theme": "...", "subject": "...", "featured_person": "", "character": ""}"""
 
 
 def analyze_image(image_bytes: bytes) -> ListingContent:
@@ -99,5 +129,11 @@ def analyze_image(image_bytes: bytes) -> ListingContent:
 
     return ListingContent(
         title=title,
-        description=data["description"]
+        description=data["description"],
+        occasion=data.get("occasion", ""),
+        theme=data.get("theme", ""),
+        subject=data.get("subject", ""),
+        featured_person=data.get("featured_person", ""),
+        character=data.get("character", ""),
+        material="Cardboard"
     )

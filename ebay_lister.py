@@ -103,7 +103,12 @@ class EbayLister:
         title: str,
         description: str,
         image_urls: list[str],
-        quantity: int = 1
+        quantity: int = 1,
+        occasion: str = "",
+        theme: str = "",
+        subject: str = "",
+        featured_person: str = "",
+        character: str = ""
     ) -> bool:
         """
         Create or update an inventory item.
@@ -114,6 +119,11 @@ class EbayLister:
             description: HTML description
             image_urls: List of image URLs
             quantity: Available quantity for this item
+            occasion: AI-detected occasion (Christmas, Birthday, etc.)
+            theme: AI-detected theme (Animals, Landscape, etc.)
+            subject: AI-detected subject (Beach, Mountains, etc.)
+            featured_person: Famous person if depicted
+            character: Fictional character if depicted
 
         Returns:
             True if successful
@@ -122,6 +132,33 @@ class EbayLister:
 
         from datetime import datetime
         current_year = str(datetime.now().year)
+
+        # Build aspects dict with required fields
+        aspects = {
+            "Type": ["Postcard"],
+            "Country of Origin": ["United States"],
+            "Postage Condition": ["Unposted"],
+            "Original/Licensed Reprint": ["Original"],
+            "Year Manufactured": [current_year],
+            "Size": ["Continental (6 x 4 in)"],
+            "Era": ["Photochrome (1939-Now)"],
+            "Unit of Sale": ["Single Unit"],
+            "Personalize": ["No"],
+            "Signed": ["No"],
+            "Material": ["Cardboard"]
+        }
+
+        # Add AI-detected aspects if provided
+        if occasion:
+            aspects["Occasion"] = [occasion]
+        if theme:
+            aspects["Theme"] = [theme]
+        if subject:
+            aspects["Subject"] = [subject]
+        if featured_person:
+            aspects["Featured Person"] = [featured_person]
+        if character:
+            aspects["Character"] = [character]
 
         payload = {
             "availability": {
@@ -134,18 +171,7 @@ class EbayLister:
                 "title": title,
                 "description": description,
                 "imageUrls": image_urls,
-                "aspects": {
-                    "Type": ["Postcard"],
-                    "Country of Origin": ["United States"],
-                    "Postage Condition": ["Unposted"],
-                    "Original/Licensed Reprint": ["Original"],
-                    "Year Manufactured": [current_year],
-                    "Size": ["Continental (6 x 4 in)"],
-                    "Era": ["Photochrome (1939-Now)"],
-                    "Unit of Sale": ["Single Unit"],
-                    "Personalize": ["No"],
-                    "Signed": ["No"]
-                }
+                "aspects": aspects
             }
         }
 
@@ -441,7 +467,12 @@ class EbayLister:
         image_bytes: bytes,
         price: float,
         shipping_cost: float | None = None,
-        quantity: int = 1
+        quantity: int = 1,
+        occasion: str = "",
+        theme: str = "",
+        subject: str = "",
+        featured_person: str = "",
+        character: str = ""
     ) -> ListingResult:
         """
         Create a complete eBay listing.
@@ -453,6 +484,11 @@ class EbayLister:
             price: Listing price in USD
             shipping_cost: Shipping cost (uses default if None)
             quantity: Number of items available (default 1)
+            occasion: AI-detected occasion
+            theme: AI-detected theme
+            subject: AI-detected subject
+            featured_person: Famous person if depicted
+            character: Fictional character if depicted
 
         Note: Automatically refreshes OAuth token if expired.
 
@@ -473,7 +509,11 @@ class EbayLister:
         sku = self._generate_sku()
         print(f"  Creating inventory item (SKU: {sku})...")
 
-        if not self.create_inventory_item(sku, title, description, [image_url], quantity):
+        if not self.create_inventory_item(
+            sku, title, description, [image_url], quantity,
+            occasion=occasion, theme=theme, subject=subject,
+            featured_person=featured_person, character=character
+        ):
             return ListingResult(success=False, error="Failed to create inventory item")
 
         print("  Creating offer...")
