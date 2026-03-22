@@ -425,27 +425,95 @@ class SettingsFrame(ttk.Frame):
             messagebox.showerror("Missing RuName",
                 "Please enter your RuName (Redirect URL name).\n\n"
                 "Create one in the eBay Developer Portal under your application settings.\n"
-                "Set the callback URL to: http://localhost:8888/oauth/callback")
+                "Set the callback URL to:\nhttps://nuronus.github.io/ebay-postcard--lister/oauth_callback.html")
             return
 
-        self.signin_btn.configure(state="disabled")
-        self.token_status_label.configure(text="Opening browser for authorization...", foreground="blue")
+        # Build authorization URL
+        import urllib.parse
+        import webbrowser
+
+        token_mgr = get_token_manager(sandbox=self.sandbox_var.get())
+        scopes = " ".join(token_mgr.get_oauth_scopes())
+
+        params = {
+            "client_id": app_id,
+            "response_type": "code",
+            "redirect_uri": ru_name,
+            "scope": scopes
+        }
+
+        auth_base = "https://auth.ebay.com/oauth2/authorize" if not self.sandbox_var.get() else "https://auth.sandbox.ebay.com/oauth2/authorize"
+        auth_url = f"{auth_base}?{urllib.parse.urlencode(params)}"
+
+        # Open browser
+        self.token_status_label.configure(text="Opening browser - authorize and copy the code...", foreground="blue")
         self.update()
+        webbrowser.open(auth_url)
 
-        def do_oauth():
-            token_mgr = get_token_manager(sandbox=self.sandbox_var.get())
+        # Ask user to paste the authorization code
+        self._show_code_entry_dialog(app_id, cert_id, ru_name)
 
-            def on_complete(success, message):
-                self.after(0, lambda: self._on_oauth_complete(success, message))
+    def _show_code_entry_dialog(self, app_id: str, cert_id: str, ru_name: str):
+        """Show dialog for user to paste authorization code."""
+        dialog = tk.Toplevel(self)
+        dialog.title("Enter Authorization Code")
+        dialog.geometry("500x200")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
 
-            token_mgr.start_oauth_flow(
-                app_id=app_id,
-                cert_id=cert_id,
-                ru_name=ru_name,
-                callback=on_complete
-            )
+        # Center the dialog
+        dialog.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() - 500) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - 200) // 2
+        dialog.geometry(f"+{x}+{y}")
 
-        threading.Thread(target=do_oauth, daemon=True).start()
+        frame = ttk.Frame(dialog, padding=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frame, text="Paste the authorization code from the browser:",
+                  font=("Segoe UI", 10)).pack(anchor=tk.W)
+
+        code_entry = ttk.Entry(frame, width=60, font=("Consolas", 9))
+        code_entry.pack(fill=tk.X, pady=10)
+        code_entry.focus()
+
+        status_label = ttk.Label(frame, text="", foreground="gray")
+        status_label.pack(anchor=tk.W)
+
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(fill=tk.X, pady=10)
+
+        def submit_code():
+            code = code_entry.get().strip()
+            if not code:
+                status_label.configure(text="Please paste the authorization code", foreground="red")
+                return
+
+            status_label.configure(text="Exchanging code for tokens...", foreground="blue")
+            dialog.update()
+
+            # Exchange code in background
+            def exchange():
+                token_mgr = get_token_manager(sandbox=self.sandbox_var.get())
+                success = token_mgr._exchange_code_for_tokens(code, app_id, cert_id, ru_name)
+                self.after(0, lambda: on_exchange_complete(success))
+
+            def on_exchange_complete(success):
+                dialog.destroy()
+                self._on_oauth_complete(success, "Token exchange failed" if not success else "")
+
+            threading.Thread(target=exchange, daemon=True).start()
+
+        def cancel():
+            dialog.destroy()
+            self.token_status_label.configure(text="Sign in cancelled", foreground="gray")
+
+        ttk.Button(btn_frame, text="Submit", command=submit_code).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=cancel).pack(side=tk.LEFT, padx=5)
+
+        # Allow Enter key to submit
+        code_entry.bind("<Return>", lambda e: submit_code())
 
     def _on_oauth_complete(self, success: bool, message: str):
         """Handle OAuth flow completion."""
@@ -869,21 +937,22 @@ class ListingFrame(ttk.Frame):
                 result.barcode = barcode if barcode else None
                 if result.success:
                     save_listing(result)
-                    # Update inventory if barcode provided
-                    if barcode:
-                        inventory = get_inventory()
-                        if inventory.barcode_exists(barcode):
-                            inventory.mark_listed(barcode, result.listing_id, result.listing_url)
-                        else:
-                            inventory.add_item(
-                                barcode=barcode,
-                                title=title,
-                                description=description,
-                                image_path=image_path,
-                                quantity=quantity,
-                                price=price
-                            )
-                            inventory.mark_listed(barcode, result.listing_id, result.listing_url)
+                    # Always save to inventory
+                    inventory = get_inventory()
+                    # Generate barcode if not provided
+                    item_barcode = barcode if barcode else f"AUTO-{result.listing_id}"
+                    if inventory.barcode_exists(item_barcode):
+                        inventory.mark_listed(item_barcode, result.listing_id, result.listing_url)
+                    else:
+                        inventory.add_item(
+                            barcode=item_barcode,
+                            title=title,
+                            description=description,
+                            image_path=image_path,
+                            quantity=quantity,
+                            price=price
+                        )
+                        inventory.mark_listed(item_barcode, result.listing_id, result.listing_url)
                 self.after(0, lambda: self._listing_complete(result))
             except Exception as e:
                 self.after(0, lambda: self._show_error(f"Listing failed: {e}"))
@@ -1411,15 +1480,19 @@ class InventoryFrame(ttk.Frame):
             messagebox.showwarning("No Selection", "Please select items to delete.")
             return
 
-        barcodes = [self.tree.item(item)["values"][0] for item in selected]
+        # Convert to string in case Treeview returns different types
+        barcodes = [str(self.tree.item(item)["values"][0]) for item in selected]
 
-        if not messagebox.askyesno("Confirm Delete", f"Delete {len(barcodes)} item(s)?"):
+        if not messagebox.askyesno("Confirm Delete", f"Delete {len(barcodes)} item(s)?\n\nBarcodes: {', '.join(barcodes[:5])}{'...' if len(barcodes) > 5 else ''}"):
             return
 
         inventory = get_inventory()
+        deleted = 0
         for barcode in barcodes:
-            inventory.delete_item(barcode)
+            if inventory.delete_item(barcode):
+                deleted += 1
 
+        messagebox.showinfo("Deleted", f"Deleted {deleted} of {len(barcodes)} items.")
         self._refresh_inventory()
 
 

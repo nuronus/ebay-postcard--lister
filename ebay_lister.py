@@ -61,7 +61,7 @@ def save_listing(result: ListingResult) -> None:
 class EbayLister:
     """Handles eBay API calls for creating listings."""
 
-    POSTCARD_CATEGORY_ID = "40091"  # Collectibles > Postcards > Other Postcards
+    POSTCARD_CATEGORY_ID = "262043"  # Collectibles > Postcards > Non-Topographical Postcards
 
     def __init__(self):
         self.base_url = config.ebay_api_url
@@ -120,6 +120,9 @@ class EbayLister:
         """
         url = f"{self.base_url}/sell/inventory/v1/inventory_item/{sku}"
 
+        from datetime import datetime
+        current_year = str(datetime.now().year)
+
         payload = {
             "availability": {
                 "shipToLocationAvailability": {
@@ -133,7 +136,15 @@ class EbayLister:
                 "imageUrls": image_urls,
                 "aspects": {
                     "Type": ["Postcard"],
-                    "Country/Region of Manufacture": ["United States"]
+                    "Country of Origin": ["United States"],
+                    "Postage Condition": ["Unposted"],
+                    "Original/Licensed Reprint": ["Original"],
+                    "Year Manufactured": [current_year],
+                    "Size": ["Continental (6 x 4 in)"],
+                    "Era": ["Photochrome (1939-Now)"],
+                    "Unit of Sale": ["Single Unit"],
+                    "Personalize": ["No"],
+                    "Signed": ["No"]
                 }
             }
         }
